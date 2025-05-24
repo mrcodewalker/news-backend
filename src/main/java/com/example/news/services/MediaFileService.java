@@ -3,9 +3,11 @@ package com.example.news.services;
 import com.example.news.handler.ResourceNotFoundException;
 import com.example.news.models.MediaFile;
 import com.example.news.repositories.MediaFileRepository;
+import com.example.news.responses.ApiResponse;
 import com.example.news.responses.MediaFileResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,7 +39,7 @@ public class MediaFileService {
         this.mediaFileRepository = mediaFileRepository;
     }
 
-    public MediaFileResponse uploadFile(MultipartFile file) throws IOException {
+    public ApiResponse<MediaFileResponse> uploadFile(MultipartFile file) throws IOException {
         LocalDate today = LocalDate.now();
         String year = String.valueOf(today.getYear());
         String month = String.format("%02d", today.getMonthValue());
@@ -51,57 +53,65 @@ public class MediaFileService {
 
         String originalFilename = file.getOriginalFilename();
         Optional<MediaFile> mediaFileData = this.mediaFileRepository.getByOriginalName(originalFilename);
-        if (mediaFileData.isEmpty()) {
-            MediaFile mediaFile = new MediaFile();
-            String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-            String newFilename = UUID.randomUUID().toString() + extension;
-
-            Path targetLocation = dateDirectory.resolve(newFilename);
-            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-
-            mediaFile.setFileName(newFilename);
-            mediaFile.setOriginalName(originalFilename);
-            mediaFile.setFilePath(String.format("/uploads/%s/%s/%s/%s", year, month, day, newFilename));
-            mediaFile.setFileType(extension.substring(1).toLowerCase());
-            mediaFile.setFileSize(file.getSize());
-            mediaFile.setMimeType(file.getContentType());
-
-            if (file.getContentType().startsWith("image/")) {
-                try (var inputStream = file.getInputStream()) {
-                    BufferedImage img = ImageIO.read(inputStream);
-                    if (img != null) {
-                        mediaFile.setDimensions(img.getWidth() + "x" + img.getHeight());
-                    }
-                }
-            }
-            return convertToResponse(this.mediaFileRepository.save(mediaFile));
+        if (mediaFileData.isPresent()) {
+            return ApiResponse.error(HttpStatus.BAD_REQUEST, "File with this name already exists");
         }
-        return convertToResponse(mediaFileData.get());
-    }
-    public List<MediaFileResponse> findPDFFIle(){
-        return this.mediaFileRepository.findByFileType("pdf")
-                .stream()
-                .map(this::convertToResponse)
-                .collect(Collectors.toList());
+
+        String uniqueFilename = UUID.randomUUID().toString() + "_" + originalFilename;
+        Path targetLocation = dateDirectory.resolve(uniqueFilename);
+        Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+
+        MediaFile mediaFile = new MediaFile();
+        mediaFile.setOriginalName(originalFilename);
+        mediaFile.setFilePath(targetLocation.toString());
+        mediaFile.setFileType(file.getContentType());
+        mediaFile.setFileSize(file.getSize());
+
+        if (file.getContentType() != null && file.getContentType().startsWith("image/")) {
+            BufferedImage image = ImageIO.read(file.getInputStream());
+            if (image != null) {
+                mediaFile.setDimensions(image.getWidth() + "x" + image.getHeight());
+            }
+        }
+
+        MediaFile savedFile = mediaFileRepository.save(mediaFile);
+        return ApiResponse.created(convertToResponse(savedFile), "File uploaded successfully");
     }
 
-    public List<MediaFileResponse> findAllImages() {
-        return this.mediaFileRepository.findAll().stream()
-                .map(this::convertToResponse)
-                .collect(Collectors.toList());
+    public ApiResponse<MediaFileResponse> getFileById(Long id) {
+        MediaFile file = mediaFileRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found"));
+        return ApiResponse.success(convertToResponse(file));
     }
 
-    private MediaFileResponse convertToResponse(MediaFile mediaFile) {
+    public ApiResponse<List<MediaFileResponse>> getAllFiles() {
+        List<MediaFile> files = mediaFileRepository.findAll();
+        return ApiResponse.success(files.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList()));
+    }
+
+    public ApiResponse<Void> deleteFile(Long id) {
+        MediaFile file = mediaFileRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("File not found"));
+        
+        try {
+            Files.deleteIfExists(Paths.get(file.getFilePath()));
+            mediaFileRepository.deleteById(id);
+            return ApiResponse.success(null, "File deleted successfully");
+        } catch (IOException e) {
+            return ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error deleting file: " + e.getMessage());
+        }
+    }
+
+    private MediaFileResponse convertToResponse(MediaFile file) {
         return MediaFileResponse.builder()
-                .id(mediaFile.getId())
-                .fileName(mediaFile.getFileName())
-                .filePath(mediaFile.getFilePath())
-                .fileSize(mediaFile.getFileSize())
-                .fileType(mediaFile.getFileType())
-                .createdAt(mediaFile.getCreatedAt())
-                .mimeType(mediaFile.getMimeType())
-                .originalName(mediaFile.getOriginalName())
-                .dimensions(mediaFile.getDimensions())
+                .id(file.getId())
+                .originalName(file.getOriginalName())
+                .filePath(file.getFilePath())
+                .fileType(file.getFileType())
+                .fileSize(file.getFileSize())
+                .dimensions(file.getDimensions())
                 .build();
     }
 }

@@ -1,14 +1,12 @@
 package com.example.news.controllers;
 
 import com.example.news.dtos.UserDTO;
-import com.example.news.enums.ArticleStatus;
-import com.example.news.responses.ArticleResponse;
+import com.example.news.responses.ApiResponse;
 import com.example.news.responses.CustomPageResponse;
 import com.example.news.responses.UserResponse;
 import com.example.news.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -24,36 +22,32 @@ public class UserController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody UserDTO userDTO) {
-        UserResponse response = userService.register(userDTO);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    public ResponseEntity<ApiResponse<UserResponse>> register(@RequestBody UserDTO userDTO) {
+        return ResponseEntity.ok(userService.register(userDTO));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody UserDTO userDTO) {
-        UserResponse response = userService.login(userDTO);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<ApiResponse<UserResponse>> login(@RequestBody UserDTO userDTO) {
+        return ResponseEntity.ok(userService.login(userDTO));
     }
+
     @PostMapping("/filter")
-    public ResponseEntity<?> getArticlesByStatus(
+    public ResponseEntity<ApiResponse<Page<UserResponse>>> getArticlesByStatus(
             @RequestParam(defaultValue = "true") boolean active,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Page<UserResponse> userResponses = userService.pagingUser(active, page, size);
-        return ResponseEntity.ok(new CustomPageResponse<>(userResponses));
+        return ResponseEntity.ok(userService.pagingUser(active, page, size));
     }
 
     @DeleteMapping("/delete/{username}")
     @PreAuthorize("hasRole('ADMIN') or #username == authentication.principal.username")
-    public ResponseEntity<Void> deleteUser(@PathVariable String username) {
-        userService.deleteUser(username);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable String username) {
+        return ResponseEntity.ok(userService.deleteUser(username));
     }
 
     @PutMapping("/update/{username}")
     @PreAuthorize("hasRole('ADMIN') or #username == authentication.principal.username")
-    public ResponseEntity<?> updateUser(@PathVariable String username, @RequestBody UserDTO userDTO) {
-        UserResponse response = userService.updateUser(username, userDTO);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<ApiResponse<UserResponse>> updateUser(@PathVariable String username, @RequestBody UserDTO userDTO) {
+        return ResponseEntity.ok(userService.updateUser(username, userDTO));
     }
 }

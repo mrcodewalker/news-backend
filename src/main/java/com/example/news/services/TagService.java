@@ -5,6 +5,7 @@ import com.example.news.handler.ResourceNotFoundException;
 import com.example.news.inits.SlugGenerator;
 import com.example.news.models.Tag;
 import com.example.news.repositories.TagRepository;
+import com.example.news.responses.ApiResponse;
 import com.example.news.responses.TagResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,51 +29,53 @@ public class TagService {
     }
 
     @Transactional
-    public TagResponse createTag(TagDTO tagDTO) {
+    public ApiResponse<TagResponse> createTag(TagDTO tagDTO) {
         Tag tag = new Tag();
         tag.setSlug(slugGenerator.generateSlug(tagDTO.getName()));
         tag.setName(tagDTO.getName());
         tag.setCreatedAt(LocalDateTime.now());
-        return this.mapToResponse(tagRepository.save(tag));
+        return ApiResponse.created(this.mapToResponse(tagRepository.save(tag)), "Tag created successfully");
     }
 
-    public TagResponse getTagById(Long id) {
-        return this.mapToResponse(tagRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Can not find with id")));
+    public ApiResponse<TagResponse> getTagById(Long id) {
+        return ApiResponse.success(this.mapToResponse(tagRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Can not find with id"))));
     }
 
-    public TagResponse getTagBySlug(String slug) {
-        return this.mapToResponse(tagRepository.findBySlug(slug)
-                .orElseThrow(() -> new ResourceNotFoundException("Can not find with slug")));
+    public ApiResponse<TagResponse> getTagBySlug(String slug) {
+        return ApiResponse.success(this.mapToResponse(tagRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResourceNotFoundException("Can not find with slug"))));
     }
 
-    public List<TagResponse> getAllTags() {
-        return tagRepository.findAll().stream()
+    public ApiResponse<List<TagResponse>> getAllTags() {
+        return ApiResponse.success(tagRepository.findAll().stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     @Transactional
-    public TagResponse updateTag(Long id, TagDTO tagDTO) {
+    public ApiResponse<TagResponse> updateTag(Long id, TagDTO tagDTO) {
         Tag tag = this.tagRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Can not update right now!"));
         if (tagDTO.getName()!=null){
             tag.setSlug(slugGenerator.generateSlug(tagDTO.getName()));
             tag.setName(tagDTO.getName());
         }
-        return this.mapToResponse(tagRepository.save(tag));
+        return ApiResponse.success(this.mapToResponse(tagRepository.save(tag)), "Tag updated successfully");
     }
 
     @Transactional
-    public void deleteTag(Long id) {
+    public ApiResponse<Void> deleteTag(Long id) {
         Tag tag = this.tagRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Can not update right now!"));
         tagRepository.deleteById(id);
+        return ApiResponse.success(null, "Tag deleted successfully");
     }
 
-    public List<Tag> getTagsByIds(List<Long> ids) {
-        return tagRepository.findAllById(ids);
+    public ApiResponse<List<Tag>> getTagsByIds(List<Long> ids) {
+        return ApiResponse.success(tagRepository.findAllById(ids));
     }
+
     private TagResponse mapToResponse(Tag tag){
         return TagResponse.builder()
                 .name(tag.getName())

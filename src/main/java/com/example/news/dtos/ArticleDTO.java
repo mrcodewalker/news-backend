@@ -14,6 +14,8 @@ import java.util.List;
 public class ArticleDTO {
     private Long categoryId;
     private String title;
+    private String folderUrl;
+    private Long subCategoryId;
     private String summary;
     private String content;
     private Long thumbnailId;

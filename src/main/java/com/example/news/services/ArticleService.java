@@ -4,17 +4,9 @@ import com.example.news.dtos.ArticleDTO;
 import com.example.news.enums.ArticleStatus;
 import com.example.news.handler.ResourceNotFoundException;
 import com.example.news.inits.SlugGenerator;
-import com.example.news.models.Article;
-import com.example.news.models.Category;
-import com.example.news.models.MediaFile;
-import com.example.news.models.Tag;
-import com.example.news.repositories.ArticleRepository;
-import com.example.news.repositories.CategoryRepository;
-import com.example.news.repositories.MediaFileRepository;
-import com.example.news.repositories.TagRepository;
-import com.example.news.responses.ArticleDetailResponse;
-import com.example.news.responses.ArticleResponse;
-import com.example.news.responses.TagResponse;
+import com.example.news.models.*;
+import com.example.news.repositories.*;
+import com.example.news.responses.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.metrics.StartupStep;
 import org.springframework.data.domain.Page;
@@ -36,25 +28,36 @@ public class ArticleService {
     private final MediaFileRepository mediaFileRepository;
     private final SlugGenerator slugGenerator;
     private final TagRepository tagRepository;
-
+    private final SubCategoryRepository subCategoryRepository;
     @Autowired
     public ArticleService(ArticleRepository articleRepository,
                           CategoryRepository categoryRepository,
                           MediaFileRepository mediaFileRepository,
                           SlugGenerator slugGenerator,
-                          TagRepository tagRepository) {
+                          TagRepository tagRepository,
+                          SubCategoryRepository subCategoryRepository) {
         this.articleRepository = articleRepository;
         this.categoryRepository = categoryRepository;
         this.mediaFileRepository = mediaFileRepository;
         this.slugGenerator = slugGenerator;
         this.tagRepository = tagRepository;
+        this.subCategoryRepository = subCategoryRepository;
     }
 
-    public ArticleResponse createArticle(ArticleDTO articleDTO) {
+    public ApiResponse<ArticleResponse> createArticle(ArticleDTO articleDTO) {
         Article article = new Article();
         if (articleDTO.getThumbnailId()==null){
             article.setThumbnail(this.mediaFileRepository.findById(1L)
                     .orElseThrow(() -> new ResourceNotFoundException("No thumbnail default")));
+        }
+        if (articleDTO.getFolderUrl() != null){
+            article.setUrl(
+                    articleDTO.getFolderUrl());
+        }
+        if (articleDTO.getSubCategoryId()!=null){
+            this.subCategoryRepository.findById(articleDTO.getSubCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Can not find sub category id"));
+            article.setSubCategoryId(articleDTO.getSubCategoryId());
         }
         if (articleDTO.getTitle()!=null) {
             article.setTitle(articleDTO.getTitle());
@@ -96,12 +99,21 @@ public class ArticleService {
             article.setFileId(file.getId());
         }
 
-        return convertToResponse(articleRepository.save(article));
+        return ApiResponse.created(convertToResponse(articleRepository.save(article)), "Article created successfully");
     }
     @Transactional
-    public ArticleResponse updateArticle(Long id, ArticleDTO articleDTO) {
+    public ApiResponse<ArticleResponse> updateArticle(Long id, ArticleDTO articleDTO) {
         Article article = articleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Article not found"));
+        if (articleDTO.getFolderUrl() != null){
+            article.setUrl(
+                    articleDTO.getFolderUrl());
+        }
+        if (articleDTO.getSubCategoryId()!=null){
+            this.subCategoryRepository.findById(articleDTO.getSubCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Can not find sub category id"));
+            article.setSubCategoryId(articleDTO.getSubCategoryId());
+        }
         if (articleDTO.getTitle()!=null) {
             if (!articleDTO.getTitle().equalsIgnoreCase(article.getTitle())) {
                 article.setTitle(articleDTO.getTitle());
@@ -138,64 +150,101 @@ public class ArticleService {
             article.setStatus(ArticleStatus.DRAFT);
         }
         article.setFileId(articleDTO.getFileId());
-        return convertToResponse(articleRepository.save(article));
+        return ApiResponse.success(convertToResponse(articleRepository.save(article)), "Article updated successfully");
     }
 
-    public void deleteArticle(Long id) {
+    public ApiResponse<Void> deleteArticle(Long id) {
         articleRepository.deleteById(id);
+        return ApiResponse.success(null, "Article deleted successfully");
     }
 
-    public ArticleResponse getArticle(Long id) {
+    public ApiResponse<ArticleResponse> getArticle(Long id) {
         Article article = articleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Article not found"));
-        return convertToResponse(article);
+        return ApiResponse.success(convertToResponse(article));
     }
-    public Page<ArticleResponse> getArticlesByCategory(Long categoryId, int page, int size) {
+    public ApiResponse<Page<ArticleResponse>> getArticlesByCategory(Long categoryId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("publishedAt").descending());
         Page<Article> articlePage = articleRepository.findByCategoryId(categoryId, pageable);
-        return articlePage.map(this::convertToResponse);
+        return ApiResponse.success(articlePage.map(this::convertToResponse));
     }
 
-    public Page<ArticleResponse> getArticlesByStatus(ArticleStatus status, int page, int size) {
+    public ApiResponse<Page<ArticleResponse>> getArticlesByStatus(ArticleStatus status, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Article> articlePage = articleRepository.findByStatus(status, pageable);
-        return articlePage.map(this::convertToResponse);
+        return ApiResponse.success(articlePage.map(this::convertToResponse));
     }
 
     @Transactional
-    public void incrementViewCount(Long articleId) {
+    public ApiResponse<Void> incrementViewCount(Long articleId) {
         Article article = articleRepository.findById(articleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Article not found"));
         article.setViewCount(article.getViewCount() + 1);
         articleRepository.save(article);
+        return ApiResponse.success(null, "View count incremented successfully");
     }
 
-    public Page<ArticleResponse> searchArticles(String keyword, int page, int size) {
+    public ApiResponse<Page<ArticleResponse>> searchArticles(String keyword, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("publishedAt").descending());
         Page<Article> articlePage = articleRepository.searchArticles(keyword, pageable);
-        return articlePage.map(this::convertToResponse);
+        return ApiResponse.success(articlePage.map(this::convertToResponse));
     }
-    public ArticleDetailResponse getArticleBySlug(String slug) {
+    public ApiResponse<ArticleDetailResponse> getArticleBySlug(String slug) {
         Article article = articleRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Article not found"));
         article.setViewCount(article.getViewCount()+1);
         this.articleRepository.save(article);
         List<Long> tagIds = article.getTags().stream().map(Tag::getId).toList();
-        return ArticleDetailResponse.builder()
+        if (article.getSubCategoryId()!=null){
+            return ApiResponse.success(ArticleDetailResponse.builder()
+                    .articleResponse(convertToResponse(article))
+                    .list(articleRepository.findArticlesBySubCategory(
+                            article.getSubCategoryId(),
+                             article.getId(),
+                            PageRequest.of(0, 10)
+                    )
+                            .stream()
+                            .map(this::convertToResponse)
+                            .collect(Collectors.toList()))
+                    .build());
+        }
+        return ApiResponse.success(ArticleDetailResponse.builder()
                 .articleResponse(convertToResponse(article))
-                .list(articleRepository.findRelatedArticles(article.getId(), article.getCategory().getId(), tagIds)
+                .list(articleRepository.findArticlesByCategory(
+                                article.getCategory().getId(), article.getId(),
+                                PageRequest.of(0, 10))
                         .stream()
                         .map(this::convertToResponse)
                         .collect(Collectors.toList()))
-                .build();
+                .build());
     }
-    public ArticleResponse moveToDraft(Long articleId){
+    public ApiResponse<ArticleDetailResponse> getHotArticleBySlug(String slug) {
+        Article article = articleRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResourceNotFoundException("Article not found"));
+        article.setViewCount(article.getViewCount()+1);
+        this.articleRepository.save(article);
+        List<Long> tagIds = article.getTags().stream().map(Tag::getId).toList();
+        if (article.getTags().size()>0){
+            return ApiResponse.success(ArticleDetailResponse.builder()
+                    .articleResponse(convertToResponse(article))
+                    .list(articleRepository.findArticlesWithTagsExcludingCurrent(
+                                    article.getId(),
+                                    PageRequest.of(0, 10)
+                            )
+                            .stream()
+                            .map(this::convertToResponse)
+                            .collect(Collectors.toList()))
+                    .build());
+        }
+        return this.getArticleBySlug(slug);
+    }
+    public ApiResponse<ArticleResponse> moveToDraft(Long articleId){
         Article article = this.articleRepository.findById(articleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Can not find article with article ID"));
         article.setStatus(ArticleStatus.DRAFT);
-        return convertToResponse(this.articleRepository.save(article));
+        return ApiResponse.success(convertToResponse(this.articleRepository.save(article)), "Article moved to draft successfully");
     }
-    public Page<ArticleResponse> getPublishedArticles(String keyword, String filter, Long categoryId, int page, int size) {
+    public ApiResponse<Page<ArticleResponse>> getPublishedArticles(String keyword, String filter, Long categoryId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
         Page<Article> articlePage = null;
         if (categoryId==0){
@@ -204,7 +253,7 @@ public class ArticleService {
             } else if (filter.equalsIgnoreCase("published")){
                 articlePage = articleRepository.findPublishedArticles(pageable);
             } else articlePage = articleRepository.findDraftArticles(pageable);
-            return articlePage.map(this::convertToResponse);
+            return ApiResponse.success(articlePage.map(this::convertToResponse));
         }
         if (keyword.length()>0){
             return this.searchArticles(keyword, page, size);
@@ -214,14 +263,42 @@ public class ArticleService {
         } else if (filter.equalsIgnoreCase("published")){
             articlePage = articleRepository.findPublishedArticlesCategory(pageable, categoryId);
         } else articlePage = articleRepository.findDraftArticlesCategory(pageable, categoryId);
-        return articlePage.map(this::convertToResponse);
+        return ApiResponse.success(articlePage.map(this::convertToResponse));
     }
-    public Page<ArticleResponse> getDraftArticles(int page, int size) {
+    public ApiResponse<Page<ArticleResponse>> getHotArticles(int page, int size){
+        return ApiResponse.success(this.articleRepository.findAllArticlesWithTagsByStatus(ArticleStatus.PUBLISHED,
+                PageRequest.of(page, size, Sort.by("publishedAt").descending())).map(this::convertToResponse));
+    }
+    public ApiResponse<Page<ArticleResponse>> getArticlesByCategorySlug(String slug, int page, int size) {
+        System.out.println("ALO 123");
+
+        // Tìm theo subCategory trước
+        Optional<SubCategory> subCategory = this.subCategoryRepository.findBySlug(slug);
+        if (subCategory.isPresent()) {
+            Page<Article> articlePage = this.articleRepository.findBySubCategory(
+                    subCategory.get().getId(),
+                    PageRequest.of(page, size, Sort.by("publishedAt").descending())
+            );
+            return ApiResponse.success(articlePage.map(this::convertToResponse));
+        }
+
+        Optional<Category> category = this.categoryRepository.findBySlug(slug);
+        if (category.isPresent()) {
+            Page<Article> articlePage = this.articleRepository.findByCategory(
+                    category.get().getId(),
+                    PageRequest.of(page, size, Sort.by("publishedAt").descending())
+            );
+            return ApiResponse.success(articlePage.map(this::convertToResponse));
+        }
+
+        return ApiResponse.notFound("No category or subcategory found with slug: " + slug);
+    }
+    public ApiResponse<Page<ArticleResponse>> getDraftArticles(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
         Page<Article> articlePage = articleRepository.findDraftArticles(pageable);
-        return articlePage.map(this::convertToResponse);
+        return ApiResponse.success(articlePage.map(this::convertToResponse));
     }
-    public ArticleResponse matchTagArticle(Long articleId,
+    public ApiResponse<ArticleResponse> matchTagArticle(Long articleId,
                                             Long tagId){
         Tag tag = this.tagRepository.findById(tagId)
                 .orElseThrow(() -> new ResourceNotFoundException("Can not find tag"));
@@ -230,9 +307,38 @@ public class ArticleService {
         Set<Tag> tags = article.getTags();
         tags.add(tag);
         article.setTags(tags);
-        return this.convertToResponse(this.articleRepository.save(article));
+        return ApiResponse.success(this.convertToResponse(this.articleRepository.save(article)), "Tag matched successfully");
     }
-
+    public ApiResponse<ListDataResponse> getSpecialArticle(){
+        return ApiResponse.success(ListDataResponse.builder()
+                .list(
+                this.articleRepository.mapToArticleResponses(this.articleRepository.findLatestArticlesWithTags()))
+                .tagName("Nổi bật")
+        .build());
+    }
+    public ApiResponse<ListDataResponse> getArticleBySubCategoryId(Long subCategoryId){
+        SubCategory subCategory = this.subCategoryRepository.findById(subCategoryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Can not find sub category with id"));
+        return ApiResponse.success(ListDataResponse.builder()
+                .list(
+                        this.articleRepository.mapToArticleResponses(this.articleRepository.findArticlesBySubCategory(subCategoryId)))
+                .tagName(subCategory.getName())
+                .build());
+    }
+    public ApiResponse<HomeResponse> getHomeData(){
+        List<Long> subCategoryList = this.subCategoryRepository.findAllIds();
+        subCategoryList.sort(Long::compare);
+        List<ListDataResponse> data = new ArrayList<>();
+        HomeResponse response = new HomeResponse();
+        response.setListDataResponse(this.getSpecialArticle().getData());
+        for (Long index: subCategoryList){
+            data.add(
+                    this.getArticleBySubCategoryId(index).getData()
+            );
+        }
+        response.setResponseList(data);
+        return ApiResponse.success(response);
+    }
     private ArticleResponse convertToResponse(Article article) {
         String fileUrl = null;
         Long fileId = 0L;
@@ -244,11 +350,20 @@ public class ArticleService {
             fileId = file.getId();
             fileName = file.getOriginalName();
         }
+        String subCategoryName = null;
+        if (article.getSubCategoryId()!=null) {
+            SubCategory subCategory = this.subCategoryRepository.findById(article.getSubCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Can not find sub category id"));
+            subCategoryName = subCategory.getName();
+        }
         return ArticleResponse.builder()
                 .id(article.getId())
                 .slug(article.getSlug())
+                .folderUrl(article.getUrl())
+                .subCategoryId(article.getSubCategoryId())
                 .title(article.getTitle())
                 .content(article.getContent())
+                .subCategoryName(subCategoryName)
                 .categoryId(article.getCategory().getId())
                 .publishedAt(article.getPublishedAt())
                 .summary(article.getSummary())

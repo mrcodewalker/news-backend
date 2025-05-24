@@ -5,6 +5,7 @@ import com.example.news.handler.ResourceNotFoundException;
 import com.example.news.inits.SlugGenerator;
 import com.example.news.models.Category;
 import com.example.news.repositories.CategoryRepository;
+import com.example.news.responses.ApiResponse;
 import com.example.news.responses.CategoryResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,31 +29,33 @@ public class CategoryService {
     }
 
     @Transactional
-    public CategoryResponse createCategory(CategoryDTO category) {
+    public ApiResponse<CategoryResponse> createCategory(CategoryDTO category) {
         Category entity = new Category();
         entity.setSlug(slugGenerator.generateSlug(category.getName()));
         entity.setCreatedAt(LocalDateTime.now());
         entity.setName(category.getName());
         entity.setDescription(category.getDescription());
-        return this.mapToResponse(categoryRepository.save(entity));
+        return ApiResponse.created(this.mapToResponse(categoryRepository.save(entity)), "Category created successfully");
     }
 
-    public CategoryResponse getCategoryById(Long id) {
-        return this.mapToResponse(categoryRepository.findById(id).orElseThrow(
-                () -> new ResourceNotFoundException("Can not find with ID")));
+    public ApiResponse<CategoryResponse> getCategoryById(Long id) {
+        return ApiResponse.success(this.mapToResponse(categoryRepository.findById(id).orElseThrow(
+                () -> new ResourceNotFoundException("Can not find with ID"))));
     }
 
-    public CategoryResponse getCategoryBySlug(String slug) {
-        return this.mapToResponse(categoryRepository.findBySlug(slug).orElseThrow(
-                () -> new ResourceNotFoundException("Can not find with ID")));
+    public ApiResponse<CategoryResponse> getCategoryBySlug(String slug) {
+        return ApiResponse.success(this.mapToResponse(categoryRepository.findBySlug(slug).orElseThrow(
+                () -> new ResourceNotFoundException("Can not find with ID"))));
     }
 
-    public List<CategoryResponse> getAllCategories() {
-        return categoryRepository.findAll().stream().map(this::mapToResponse).collect(Collectors.toList());
+    public ApiResponse<List<CategoryResponse>> getAllCategories() {
+        return ApiResponse.success(categoryRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList()));
     }
 
     @Transactional
-    public CategoryResponse updateCategory(Long id, CategoryDTO categoryDTO) {
+    public ApiResponse<CategoryResponse> updateCategory(Long id, CategoryDTO categoryDTO) {
         Category category = this.categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Can not find category"));
         if (categoryDTO.getDescription()!=null){
@@ -62,19 +65,21 @@ public class CategoryService {
             category.setName(categoryDTO.getName());
             category.setSlug(slugGenerator.generateSlug(category.getName()));
         }
-        return this.mapToResponse(categoryRepository.save(category));
+        return ApiResponse.success(this.mapToResponse(categoryRepository.save(category)), "Category updated successfully");
     }
 
     @Transactional
-    public void deleteCategory(Long id) {
+    public ApiResponse<Void> deleteCategory(Long id) {
         categoryRepository.findById(id)
-                        .orElseThrow(() -> new ResourceNotFoundException("Can not delete with id"));
+                .orElseThrow(() -> new ResourceNotFoundException("Can not delete with id"));
         categoryRepository.deleteById(id);
+        return ApiResponse.success(null, "Category deleted successfully");
     }
 
-    public List<Category> getCategoriesByIds(List<Long> ids) {
-        return categoryRepository.findAllById(ids);
+    public ApiResponse<List<Category>> getCategoriesByIds(List<Long> ids) {
+        return ApiResponse.success(categoryRepository.findAllById(ids));
     }
+
     private CategoryResponse mapToResponse(Category category){
         return CategoryResponse.builder()
                 .createdAt(category.getCreatedAt())

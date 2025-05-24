@@ -6,12 +6,14 @@ import com.example.news.handler.ResourceNotFoundException;
 import com.example.news.models.Article;
 import com.example.news.models.User;
 import com.example.news.repositories.UserRepository;
+import com.example.news.responses.ApiResponse;
 import com.example.news.responses.UserResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,23 +33,23 @@ public class UserService {
         this.jwtUtil = jwtUtil;
     }
 
-    public UserResponse login(UserDTO userDTO) {
+    public ApiResponse<UserResponse> login(UserDTO userDTO) {
         User user = this.userRepository.findByUsername(userDTO.getUsername())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         if (!user.isActive()){
-            throw new ResourceNotFoundException("User not found");
+            return ApiResponse.error(HttpStatus.UNAUTHORIZED, "User is not active");
         }
         if (!passwordEncoder.matches(userDTO.getPassword(), user.getPassword())) {
-            throw new ResourceNotFoundException("Invalid credentials");
+            return ApiResponse.error(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
 
         String token = jwtUtil.generateToken(user);
-
-        return new UserResponse(user.getId(), user.getUsername(), token, user.isActive(), user.getCreatedAt(), user.getRole().name());
+        return ApiResponse.success(new UserResponse(user.getId(), user.getUsername(), token, user.isActive(), user.getCreatedAt(), user.getRole().name()));
     }
-    public UserResponse register(UserDTO userDTO) {
+
+    public ApiResponse<UserResponse> register(UserDTO userDTO) {
         if (userRepository.findByUsername(userDTO.getUsername()).isPresent()) {
-            throw new IllegalArgumentException("Username already exists");
+            return ApiResponse.error(HttpStatus.BAD_REQUEST, "Username already exists");
         }
 
         User user = new User();
@@ -61,27 +63,30 @@ public class UserService {
         user = userRepository.save(user);
 
         String token = jwtUtil.generateToken(user);
-        return new UserResponse(user.getId(), user.getUsername(), token, user.isActive(), user.getCreatedAt(), user.getRole().name());
+        return ApiResponse.created(new UserResponse(user.getId(), user.getUsername(), token, user.isActive(), user.getCreatedAt(), user.getRole().name()), "User registered successfully");
     }
-    public Page<UserResponse> pagingUser(boolean active, int page, int size){
+
+    public ApiResponse<Page<UserResponse>> pagingUser(boolean active, int page, int size){
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<User> users = userRepository.findUsers(active, pageable);
-        return users.map(this::mapToResponse);
+        return ApiResponse.success(users.map(this::mapToResponse));
     }
-    public void deleteUser(String username) {
+
+    public ApiResponse<Void> deleteUser(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setActive(false);
         this.userRepository.save(user);
+        return ApiResponse.success(null, "User deactivated successfully");
     }
 
-    public UserResponse updateUser(String username, UserDTO userDTO) {
+    public ApiResponse<UserResponse> updateUser(String username, UserDTO userDTO) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (userDTO.getUsername() != null && !userDTO.getUsername().equals(username)) {
             if (userRepository.findByUsername(userDTO.getUsername()).isPresent()) {
-                throw new IllegalArgumentException("New username already exists");
+                return ApiResponse.error(HttpStatus.BAD_REQUEST, "New username already exists");
             }
             user.setUsername(userDTO.getUsername());
         }
@@ -98,8 +103,9 @@ public class UserService {
         user = userRepository.save(user);
 
         String token = jwtUtil.generateToken(user);
-        return new UserResponse(user.getId(), user.getUsername(), token, user.isActive(), user.getCreatedAt(), user.getRole().name());
+        return ApiResponse.success(new UserResponse(user.getId(), user.getUsername(), token, user.isActive(), user.getCreatedAt(), user.getRole().name()), "User updated successfully");
     }
+
     private UserResponse mapToResponse(User user){
         return UserResponse.builder()
                 .active(user.isActive())

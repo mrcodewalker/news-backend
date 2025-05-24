@@ -1,9 +1,9 @@
 package com.example.news.controllers;
 
+import com.example.news.responses.ApiResponse;
+import com.example.news.responses.MediaFileResponse;
 import com.example.news.services.MediaFileService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpStatus;
@@ -14,33 +14,37 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/media_file")
 @RequiredArgsConstructor
 public class MediaFileController {
-    private MediaFileService mediaFileService;
-    @Autowired
-    public MediaFileController(MediaFileService mediaFileService){
-        this.mediaFileService = mediaFileService;
-    }
+    private final MediaFileService mediaFileService;
+
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadFile(
-            @RequestParam("file") MultipartFile file) throws IOException {
+    public ResponseEntity<ApiResponse<MediaFileResponse>> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
         return ResponseEntity.ok(this.mediaFileService.uploadFile(file));
     }
-    @GetMapping("/views/pdf")
-    public ResponseEntity<?> viewsPDFFile(){
-        return ResponseEntity.ok(this.mediaFileService.findPDFFIle());
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<MediaFileResponse>> getFileById(@PathVariable Long id) {
+        return ResponseEntity.ok(this.mediaFileService.getFileById(id));
     }
-    @GetMapping("/filter")
-    public ResponseEntity<?> filterImages(){
-        return ResponseEntity.ok(this.mediaFileService.findAllImages());
+
+    @GetMapping("/all")
+    public ResponseEntity<ApiResponse<List<MediaFileResponse>>> getAllFiles() {
+        return ResponseEntity.ok(this.mediaFileService.getAllFiles());
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteFile(@PathVariable Long id) {
+        return ResponseEntity.ok(this.mediaFileService.deleteFile(id));
+    }
+
     @GetMapping("/uploads/{year}/{month}/{day}/{filename}")
     public ResponseEntity<Resource> getImage(
             @PathVariable String year,

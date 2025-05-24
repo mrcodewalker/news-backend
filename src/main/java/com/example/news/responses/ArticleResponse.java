@@ -17,6 +17,9 @@ import java.util.Set;
 public class ArticleResponse {
     private Long id;
     private Long categoryId;
+    private String subCategoryName;
+    private String folderUrl;
+    private Long subCategoryId;
     private String categoryName;
     private String title;
     private String slug;

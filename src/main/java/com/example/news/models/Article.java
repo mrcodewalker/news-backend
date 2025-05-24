@@ -42,7 +42,10 @@ public class Article {
     private Integer viewCount = 0;
     @Column(name = "file_id")
     private Long fileId;
-
+    @Column(name = "sub_category_id")
+    private Long subCategoryId;
+    @Column(name = "url")
+    private String url;
     @Enumerated(EnumType.STRING)
     private ArticleStatus status = ArticleStatus.DRAFT;
 

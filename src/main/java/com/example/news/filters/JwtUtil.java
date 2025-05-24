@@ -7,6 +7,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import java.security.InvalidParameterException;
@@ -26,6 +27,10 @@ public class JwtUtil {
     @Value("${jwt.expiration}")
     private Long expiration;
 
+    private Key getSigningKey() {
+        byte[] keyBytes = Base64.getDecoder().decode(this.secret);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
 
     public String generateToken(User user) throws InvalidParameterException {
         Map<String, Object> claims = new HashMap<>();
@@ -49,10 +54,7 @@ public class JwtUtil {
             throw new ResourceNotFoundException(e.getMessage());
         }
     }
-    private Key getSigningKey() {
-        byte[] keyBytes = Base64.getDecoder().decode(this.secret);
-        return Keys.hmacShaKeyFor(keyBytes);
-    }
+
     private String createToken(Map<String, Object> claims, String subject) {
         return Jwts.builder()
                 .setClaims(claims)
@@ -63,18 +65,18 @@ public class JwtUtil {
                 .compact();
     }
 
-    public Boolean validateToken(String token, String username) {
-        final String tokenUsername = extractUsername(token);
-        return (tokenUsername.equals(username) && !isTokenExpired(token));
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
+
     public String extractUserName(String token){
         return this.extractClaim(token, Claims::getSubject);
     }
-
 
     public Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
